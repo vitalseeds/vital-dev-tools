@@ -115,22 +115,18 @@ if (get_option('vital_dev_tools_label_hooks', 1)) {
 	add_action('init', 'label_template_hooks');
 }
 
-if (defined('WP_CLI') && WP_CLI) {
-	WP_CLI::add_command('vital-snippets', 'Vital_Snippets_Command');
-}
-
-class Vital_Snippets_Command
+class VitalCommand
 {
 	/**
 	 * List all code snippets with their status, id, and description.
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     wp vital-snippets list
+	 *     wp vs snippet list
 	 *
 	 * @when after_wp_load
 	 */
-	public function list()
+	public function snippet_list()
 	{
 		global $wpdb;
 		$snippets = $wpdb->get_results("SELECT id, name, description, active FROM {$wpdb->prefix}snippets");
@@ -163,11 +159,11 @@ class Vital_Snippets_Command
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     wp vital-snippets enable 1
+	 *     wp vs snippet enable 1
 	 *
 	 * @when after_wp_load
 	 */
-	public function enable($args)
+	public function snippet_enable($args)
 	{
 		global $wpdb;
 		$id = (int) $args[0];
@@ -190,11 +186,11 @@ class Vital_Snippets_Command
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     wp vital-snippets disable 1
+	 *     wp vs snippet disable 1
 	 *
 	 * @when after_wp_load
 	 */
-	public function disable($args)
+	public function snippet_disable($args)
 	{
 		global $wpdb;
 		$id = (int) $args[0];
@@ -206,7 +202,6 @@ class Vital_Snippets_Command
 			WP_CLI::error("Failed to disable snippet {$id}.");
 		}
 	}
-	// Existing methods...
 
 	/**
 	 * Enable or disable all snippets containing a specified token.
@@ -221,12 +216,12 @@ class Vital_Snippets_Command
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     wp vital-snippets toggle-by-token my_token enable
-	 *     wp vital-snippets toggle-by-token my_token disable
+	 *     wp vs snippet toggle-by-token my_token enable
+	 *     wp vs snippet toggle-by-token my_token disable
 	 *
 	 * @when after_wp_load
 	 */
-	public function toggle_by_token($args)
+	public function snippet_toggle_by_token($args)
 	{
 		global $wpdb;
 		$token = $args[0];
@@ -256,3 +251,5 @@ class Vital_Snippets_Command
 		WP_CLI::success("Snippets containing the token '{$token}' have been " . ($active ? 'enabled' : 'disabled') . ".");
 	}
 }
+
+WP_CLI::add_command('vs', 'VitalCommand');
