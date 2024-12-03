@@ -326,6 +326,7 @@ if (defined('WP_CLI') && WP_CLI) {
 		 */
 		public function move_seeds_categories()
 		{
+			WP_CLI::confirm("Move all top-level product categories containing the word 'seeds' under the parent category 'Seeds'?");
 			$parent_term = get_term_by('name', 'Seeds', 'product_cat');
 			if (!$parent_term) {
 				WP_CLI::error("Parent category 'Seeds' not found.");
