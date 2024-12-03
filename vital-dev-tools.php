@@ -30,6 +30,10 @@ add_action('admin_bar_menu', 'show_template');
 
 function show_template()
 {
+	if (!get_option('vital_dev_tools_show_template')) {
+		return;
+	}
+
 	global $template;
 ?>
 	<script>
@@ -42,6 +46,9 @@ add_action('init', 'label_template_hooks');
 
 function label_template_hooks()
 {
+	if (!get_option('vital_dev_tools_label_hooks')) {
+		return;
+	}
 	foreach (HOOK_LABELS as $hook_label) {
 		add_action($hook_label, function () use ($hook_label) {
 			echo "<h2>$hook_label</h2>";
@@ -53,7 +60,7 @@ add_action('admin_menu', 'vital_dev_tools_menu');
 
 function vital_dev_tools_menu()
 {
-	add_menu_page(
+	add_options_page(
 		'Vital Dev Tools Settings',
 		'Vital Dev Tools',
 		'manage_options',
@@ -64,11 +71,19 @@ function vital_dev_tools_menu()
 
 function vital_dev_tools_settings_page()
 {
-	if (isset($_POST['vital_dev_tools_settings'])) {
-		update_option('vital_dev_tools_show_template', isset($_POST['show_template']) ? 1 : 0);
-		update_option('vital_dev_tools_label_hooks', isset($_POST['label_hooks']) ? 1 : 0);
-		echo '<div class="updated"><p>Settings saved.</p></div>';
+	if (isset($_POST['show_template'])) {
+		update_option('vital_dev_tools_show_template', 1);
+	} else {
+		update_option('vital_dev_tools_show_template', 0);
 	}
+
+	if (isset($_POST['label_hooks'])) {
+		update_option('vital_dev_tools_label_hooks', 1);
+	} else {
+		update_option('vital_dev_tools_label_hooks', 0);
+	}
+
+	echo '<div class="updated"><p>Settings saved.</p></div>';
 
 	$show_template = get_option('vital_dev_tools_show_template', 1);
 	$label_hooks = get_option('vital_dev_tools_label_hooks', 1);
