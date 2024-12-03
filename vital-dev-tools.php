@@ -250,6 +250,70 @@ class VitalCommand
 		WP_CLI\Utils\format_items('table', $items, ['id', 'name']);
 		WP_CLI::success("Snippets containing the token '{$token}' have been " . ($active ? 'enabled' : 'disabled') . ".");
 	}
+	/**
+	 * List all product categories in a hierarchical format.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--levels=<levels>]
+	 * : The number of levels to display. Default is all levels.
+	 *
+	 * [--details]
+	 * : Show detailed information for each category.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp vs product_cat_list --levels=2 --details
+	 *
+	 * @when after_wp_load
+	 */
+	public function product_cat_list($args, $assoc_args)
+	{
+		$levels = isset($assoc_args['levels']) ? (int) $assoc_args['levels'] : -1;
+		$show_details = isset($assoc_args['details']) && $assoc_args['details'];
+
+		$terms = get_terms([
+			'taxonomy' => 'product_cat',
+			'hide_empty' => false,
+		]);
+
+		if (empty($terms)) {
+			WP_CLI::success("No product categories found.");
+			return;
+		}
+
+		$hierarchical_terms = $this->build_hierarchy($terms);
+		$this->display_hierarchy($hierarchical_terms, 0, $levels, $show_details);
+	}
+
+	private function build_hierarchy($terms, $parent_id = 0)
+	{
+		$hierarchy = [];
+		foreach ($terms as $term) {
+			if ($term->parent == $parent_id) {
+				$children = $this->build_hierarchy($terms, $term->term_id);
+				if ($children) {
+					$term->children = $children;
+				}
+				$hierarchy[] = $term;
+			}
+		}
+		return $hierarchy;
+	}
+
+	private function display_hierarchy($terms, $level = 0, $max_levels = -1, $show_details = false)
+	{
+		foreach ($terms as $term) {
+			if ($show_details) {
+				WP_CLI::line(str_repeat('--', $level * 2) . "{$term->name} ({$term->term_id}:{$term->slug} > " . get_term_link($term) . ")");
+			} else {
+				WP_CLI::line(str_repeat('--', $level * 2) . "{$term->name}");
+			}
+			if (!empty($term->children) && ($max_levels == -1 || $level + 1 < $max_levels)) {
+				$this->display_hierarchy($term->children, $level + 1, $max_levels);
+			}
+		}
+	}
 }
 
 WP_CLI::add_command('vs', 'VitalCommand');
