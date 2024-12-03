@@ -315,6 +315,45 @@ if (defined('WP_CLI') && WP_CLI) {
 				}
 			}
 		}
+		/**
+		 * Move all top-level product categories containing the word 'seeds' under the parent category 'Seeds'.
+		 *
+		 * ## EXAMPLES
+		 *
+		 *     wp vs move_seeds_categories
+		 *
+		 * @when after_wp_load
+		 */
+		public function move_seeds_categories()
+		{
+			$parent_term = get_term_by('name', 'Seeds', 'product_cat');
+			if (!$parent_term) {
+				WP_CLI::error("Parent category 'Seeds' not found.");
+				return;
+			}
+
+			$terms = get_terms([
+				'taxonomy' => 'product_cat',
+				'hide_empty' => false,
+				'parent' => 0,
+				'search' => 'seeds',
+			]);
+
+			if (empty($terms)) {
+				WP_CLI::success("No top-level product categories containing the word 'seeds' found.");
+				return;
+			}
+
+			foreach ($terms as $term) {
+				if ($term->name == 'Seeds') {
+					continue;
+				}
+				wp_update_term($term->term_id, 'product_cat', [
+					'parent' => $parent_term->term_id,
+				]);
+				WP_CLI::success("Moved category '{$term->name}' under 'Seeds'.");
+			}
+		}
 	}
 
 	WP_CLI::add_command('vs', 'VitalCommand');
