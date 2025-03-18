@@ -179,7 +179,31 @@ if (defined('WP_CLI') && WP_CLI) {
 			WP_CLI::warning("No theme options found.");
 		}
 	});
-
+	/**
+	 * Registers a WP-CLI command 'vs update_custom_css_post_id' to update the
+	 * post ID used for the current theme's custom CSS.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--duplicate]
+	 * : If set, duplicates the current custom CSS post and uses the new post ID.
+	 *
+	 * [<new_custom_css_post_id>]
+	 * : The new custom CSS post ID to be set. Optional if --duplicate is set.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     # Update custom CSS post ID to a new value.
+	 *     $ wp vs update_custom_css_post_id 123
+	 *
+	 *     # Duplicate the current custom CSS post and update the ID.
+	 *     $ wp vs update_custom_css_post_id --duplicate
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Associative arguments.
+	 *
+	 * @return void
+	 */
 	WP_CLI::add_command('vs update_custom_css_post_id', function ($args, $assoc_args) {
 		if (isset($assoc_args['duplicate']) && $assoc_args['duplicate']) {
 			$custom_css_post_id = get_theme_mod('custom_css_post_id');
