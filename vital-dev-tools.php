@@ -249,3 +249,35 @@ if (defined('WP_CLI') && WP_CLI) {
 		}
 	});
 }
+
+function hide_all_admin_notices() {
+	global $wp_filter;
+
+	$disable_all = false;
+	// $disable_all = true;
+
+	// Check if the WP_Admin_Bar exists, as it's not available on all admin pages.
+	if (isset($wp_filter['admin_notices'])) {
+		if ($disable_all) {
+			unset($wp_filter['admin_notices']);
+		} else {
+			// Remove all actions hooked to the 'admin_notices' hook.
+			foreach ($wp_filter['admin_notices']->callbacks as $priority => $hooks) {
+				foreach ($hooks as $hook => $details) {
+					if (is_array($details)) {
+						if (is_array($details['function']) && is_object($details['function'][0]) && (
+							strpos(get_class($details['function'][0]), 'Elementor') !== false ||
+							// strpos(get_class($details['function'][0]), 'WooCommerce') !== false ||
+							strpos(get_class($details['function'][0]), 'Yoast') !== false
+						)) {
+							unset($wp_filter['admin_notices']->callbacks[$priority][$hook]);
+						}
+					}
+				}
+			}
+		}
+
+	}
+}
+
+add_action('admin_init', 'hide_all_admin_notices');
