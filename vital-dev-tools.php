@@ -281,3 +281,6 @@ function hide_all_admin_notices() {
 }
 
 add_action('admin_init', 'hide_all_admin_notices');
+
+require_once __DIR__ . '/includes/deploy_calendar.php';
+require_once __DIR__ . '/includes/deploy_growing_guide.php';
