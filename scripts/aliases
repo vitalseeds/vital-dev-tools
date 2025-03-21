@@ -1,0 +1,13 @@
+#!/bin/bash
+
+alias wpa="wp plugin activate"
+alias wpd="wp plugin deactivate"
+alias wpi="wp plugin install"
+alias wpu="wp plugin uninstall"
+alias wpl="wp plugin list"
+
+alias wta="wp theme activate"
+alias wtd="wp theme deactivate"
+alias wti="wp theme install"
+alias wtu="wp theme uninstall"
+alias wtl="wp theme list"
