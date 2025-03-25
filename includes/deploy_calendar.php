@@ -26,7 +26,7 @@ if (defined('WP_CLI') && WP_CLI) {
         WP_CLI::log("Deploying growing calendar\n");
         WP_CLI::log("Note: first steps are");
         WP_CLI::log("- import calendar CSV");
-        WP_CLI::log("- temporarily disable tablepress.\n");
+        // WP_CLI::log("- temporarily disable tablepress.\n");
         WP_CLI::confirm('Delete growing calendar headings and shortcodes from all product category descriptions. Are you sure?');
         WP_CLI::runcommand('vs edit_category_description');
     });
