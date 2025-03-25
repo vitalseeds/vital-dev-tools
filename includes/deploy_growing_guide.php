@@ -49,7 +49,8 @@ if (defined('WP_CLI') && WP_CLI) {
     });
     WP_CLI::add_command('vs create_growers_guides', function() {
         $terms = get_terms(['taxonomy' => 'product_cat', 'hide_empty' => false]);
-        create_empty_growers_guides($terms);
+        // create_empty_growers_guides($terms);
+        create_growers_guides_from_product_cat($terms);
     });
 
     WP_CLI::add_command('vs deploy_growing_guide', function() {
@@ -57,7 +58,7 @@ if (defined('WP_CLI') && WP_CLI) {
         WP_CLI::runcommand('vs construct_all_seeds_category');
         // WP_CLI::runcommand('vs remove_empty_categories');
         WP_CLI::runcommand('vs product_cat_tree');
-        // WP_CLI::runcommand('vs create_growers_guides');
+        WP_CLI::runcommand('vs create_growers_guides');
     });
 
     // Miscellanous commands
@@ -152,6 +153,20 @@ function remove_empty_parent_categories($tree, $parent_id = 0, $depth = 0) {
     }
 }
 
+
+function delete_all_growing_guides() {
+    $posts = get_posts([
+        'post_type' => 'growing-guide',
+        'numberposts' => -1,
+        'post_status' => 'any'
+    ]);
+
+    foreach ($posts as $post) {
+        wp_delete_post($post->ID, true);
+        echo "Deleted growing guide {$post->post_title}\n";
+    }
+}
+
 function create_empty_growers_guides($terms) {
     foreach ($terms as $term) {
         if (is_under_seeds_category($term->term_id) && $term->description) {
@@ -179,15 +194,67 @@ function create_empty_growers_guides($terms) {
     }
 }
 
-function delete_all_growing_guides() {
-    $posts = get_posts([
-        'post_type' => 'growing-guide',
-        'numberposts' => -1,
-        'post_status' => 'any'
-    ]);
+function description_has_growing_information($description) {
+    preg_match_all('/<h[1-6][^>]*>(.*?Growing.*?)<\/h[1-6]>/', $description, $matches);
+    return $matches[1];
+}
 
-    foreach ($posts as $post) {
-        wp_delete_post($post->ID, true);
-        echo "Deleted growing guide {$post->post_title}\n";
+function get_headings_from_description($description) {
+    preg_match_all('/<h[1-6][^>]*>(.*?)<\/h[1-6]>/', $description, $matches);
+    return $matches[1];
+}
+
+function create_growers_guides_from_product_cat($terms, $check_only = true, $growing_info = true) {
+    // - step through by category
+    // - if category has products
+    //    - check the product descriptions
+        //    - compare product descriptions within category
+        //    - if the same (or similar?) make category guide
+        //    - else make product guides
+    // - Divide up the description by heading, use regex or simple explode
+    // - create growers guide
+    // - log guides created
+    $count_seeds_categories = 0;
+    $count_seeds_category_growing_instructions = 0;
+    $items_with_growing_info = !($check_only && !$growing_info);
+
+    foreach ($terms as $term) {
+
+        if (is_under_seeds_category($term->term_id) && $term->description) {
+            $cat_name = trim(str_replace(['Seeds', 'seeds'], '', $term->name));
+            $term_url = get_term_link($term);
+
+            $count_seeds_categories ++;
+            // if (preg_match_all('/<h[1-6][^>]*>(.*?)<\/h[1-6]>/', $term->description, $matches)) {
+
+
+            if ($headings_including_growing = description_has_growing_information($term->description)) {
+                $count_seeds_category_growing_instructions ++;
+
+                if ($items_with_growing_info) {
+                    $all_headings = get_headings_from_description($term->description);
+
+                    echo $cat_name . "\n";
+                    echo $term_url . "\n";
+                    echo "--------------------------------------\n";
+                    // foreach ($headings_including_growing as $heading) {
+                    //     echo "  " . strip_tags($heading) . "\n";
+                    // }
+                    foreach ($all_headings as $heading) {
+                        echo "  " . strip_tags($heading) . "\n";
+                    }
+                    // $description = wordwrap($term->description, 120, "\n    ");
+                    // echo $description . "\n";
+                    echo "======================================-\n";
+                }
+            } else if (!$items_with_growing_info) {
+                echo $cat_name . "\n";
+                echo $term_url . "\n";
+                echo "--------------------------------------\n";
+
+            }
+        }
     }
+    echo "\n\nSeeds categories: {$count_seeds_categories}\n";
+    echo "Seeds category growing instructions: {$count_seeds_category_growing_instructions}\n";
 }
