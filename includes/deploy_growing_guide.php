@@ -195,28 +195,57 @@ function create_empty_growers_guides($terms) {
 }
 
 function description_headings_by_phrase($description, $phrase) {
-    // preg_match_all("/<h[1-6][^>]*>(.*?$phrase.*?)<\/h[1-6]>/", $description, $matches);
-    preg_match_all("/<h[1-6][^>]*>(.*?Sow.*?)<\/h[1-6]>/", $description, $matches);
-    return $matches[1];
+    $headings = get_headings_from_description($description);
+    $matching_headings = [];
+    foreach ($headings as $heading) {
+        if (is_array($phrase)) {
+            foreach ($phrase as $p) {
+                if (stripos($heading, $p) !== false) {
+                    $matching_headings[] = $heading;
+                    break;
+                }
+            }
+        } else {
+            if (stripos($heading, $phrase) !== false) {
+                $matching_headings[] = $heading;
+            }
+        }
+    }
+    return $matching_headings;
 }
 
 function description_has_growing_information($description) {
-    // preg_match_all('/<h[1-6][^>]*>(.*?Growing.*?)<\/h[1-6]>/', $description, $matches);
-    // return $matches[1];
-    return description_headings_by_phrase($description, 'Growing');
+    preg_match_all('/<h[1-6][^>]*>(.*?Growing.*?)<\/h[1-6]>/', $description, $matches);
+    return $matches[1];
+    // return description_headings_by_phrase($description, 'Growing');
 }
 
 function get_headings_from_description($description) {
-    preg_match_all('/<h[1-6][^>]*>(.*?)<\/h[1-6]>/', $description, $matches);
-    return $matches[1];
+    // preg_match_all('/<h[1-6][^>]*>(.*?)<\/h[1-6]>/', $description, $matches);
+    // return $matches[1];
+    $dom = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $dom->loadHTML($description);
+    libxml_clear_errors();
+    $xpath = new DOMXPath($dom);
+
+    $headings = [];
+    foreach (range(1, 6) as $level) {
+        $nodes = $xpath->query("//h{$level}");
+        foreach ($nodes as $node) {
+            $headings[] = trim($node->textContent);
+        }
+    }
+    return $headings;
 }
+
 
 function best_match_page_title($pages, $string, $extended_string=null) {
     $best_match = null;
     $best_similarity = 0;
     $extended_string = $extended_string ?? $string;
     foreach ($pages as $page) {
-        similar_text($cat_name, $page->post_title, $similarity);
+        similar_text($string, $page->post_title, $similarity);
         // if the exact string is found in the title give it a boost
         if (stripos($page->post_title, $extended_string) !== false) {
             $similarity += 20;
@@ -234,8 +263,16 @@ function get_elementor_markup($page) {
     if ($elementor_data) {
         $elementor_content = \Elementor\Plugin::$instance->frontend->get_builder_content_for_display($page->ID);
         // Remove layout tags
-        $content = preg_replace('/<section[^>]*>|<\/section>|<div[^>]*>|<\/div>/', '', $elementor_content);
-        $content = preg_replace('/<span[^>]*>|<\/span>/', '', $content);
+        // $content = preg_replace('/<section[^>]*>|<\/section>|<div[^>]*>|<\/div>/', '', $elementor_content);
+        // $content = preg_replace('/<span[^>]*>|<\/span>/', '', $content);
+        // // Remove images
+        // $content = preg_replace('/<img[^>]*>/', '', $content);
+        // return $content;
+        $content = strip_tags($elementor_content, ['p', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li']);
+        // remove class attributes
+        $content = preg_replace('/class="[^"]*"/', '', $content);
+        // remove target attributes
+        $content = preg_replace('/target="[^"]*"/', '', $content);
         // Remove extra whitespace
         $content = preg_replace('/\s+/', ' ', $content);
         return $content;
@@ -245,16 +282,28 @@ function get_elementor_markup($page) {
 
 function create_category_growers_guide_from_page($term, $page, $title=null) {
     $page_content = get_elementor_markup($page);
-    $sowing_section = description_headings_by_phrase($page_content, 'Sow');
 
-    $wrapped_content = wordwrap($page_content, 120, "\n");
-    echo $wrapped_content;
-    echo "\n==========================================\n\n";
+    $headings = [
+        'sowing' => description_headings_by_phrase($page_content, 'Sow'),
+        'transplant' => description_headings_by_phrase($page_content, 'Transplant'),
+        'care' => description_headings_by_phrase($page_content, 'Care'),
+        'challenges' => description_headings_by_phrase($page_content, ['Challenges', 'Diseases']),
+        'harvest' => description_headings_by_phrase($page_content, 'Harvest'),
+        'seed' => description_headings_by_phrase($page_content, 'Saving'),
+        'varieties' => description_headings_by_phrase($page_content, 'Varieties'),
+    ];
 
-    foreach ($sowing_section as $section) {
-        echo $section . "\n\n";
+    foreach ($headings as $key => $heading) {
+        if (!empty($heading)) {
+            echo "\033[32m✔ {$key}: " . $heading[0] . (count($heading) > 1 ? " (" . count($heading) . ")" : "") . "\033[0m\n";
+            if (count($heading) > 1) {
+                echo "    - " . implode("\n  ", $heading) . "\n";
+            }
+        } else {
+            echo "\033[31m✘ {$key}: None\033[0m\n";
+        }
     }
-    return;
+    echo "----------------------------------------\n";
 
     $post_id = wp_insert_post([
         'post_title' => $title ?? 'How to grow ' . $term->name,
@@ -263,12 +312,11 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
         'post_type' => 'growing-guide',
     ]);
 
-
     if (!is_wp_error($post_id)) {
         update_field('growers_guide', $post_id, 'term_' . $term->term_id);
-        update_field('seed_sowing', $sowing_section, $post_id);
+        // update_field('seed_sowing', $sowing_section, $post_id);
         wp_set_object_terms($post_id, $term->term_id, 'product_cat');
-        echo "Created growers guide for {$term->name} from page {$page->post_title}\n";
+        echo "Created guide: \033[36m{$term->name} \033[0m -> \033[35m{$page->post_title} (guide)\033[0m\n";
         return get_post($post_id);
     } else {
         echo "Failed to create growers guide for {$term->name} from page {$page->post_title}\n";
@@ -303,6 +351,7 @@ function create_growers_guides_from_product_cat($terms, $check_only = true, $gro
     $items_with_growing_info = !($check_only && !$growing_info);
 
     delete_all_growing_guides();
+    echo "========================================\n\n";
 
     foreach ($terms as $term) {
 
@@ -327,10 +376,12 @@ function create_growers_guides_from_product_cat($terms, $check_only = true, $gro
 
             // Growing resources page
             if (!empty($growing_resource_pages) && $growing_info) {
-                echo "{$cat_name}:\n";
+                echo "Category: \033[33m{$cat_name}:\033[0m\n";
+                echo "----------------------------------------\n";
 
                 $best_match = best_match_page_title($growing_resource_pages, $cat_name, $guide_title);
 
+                echo "Existing guide page(s):\n";
                 foreach ($growing_resource_pages as $page) {
                     $asterisk = ($page == $best_match) ? " *" : "  ";
                     // resource page title contains category name
@@ -340,6 +391,7 @@ function create_growers_guides_from_product_cat($terms, $check_only = true, $gro
                         echo "  - {$page->post_title} ({$page->ID}) $asterisk  - {$page_url}\n";
                     }
                 }
+                echo "----------------------------------------\n";
                 if ($best_match) {
                     $guide = create_category_growers_guide_from_page($term, $best_match, $guide_title);
                     $permalink = get_permalink($guide);
