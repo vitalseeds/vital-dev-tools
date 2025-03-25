@@ -239,6 +239,36 @@ function get_headings_from_description($description) {
     return $headings;
 }
 
+function get_sections_between_headings($page_content, $headings) {
+    $sections = [];
+    $dom = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $dom->loadHTML(mb_convert_encoding($page_content, 'HTML-ENTITIES', 'UTF-8'));
+    libxml_clear_errors();
+    $xpath = new DOMXPath($dom);
+
+    foreach ($headings as $key => $heading) {
+        if (!empty($heading)) {
+            foreach ($heading as $h) {
+                $section = '';
+                // Find nodes that follow the heading
+                $nodes = $xpath->query("//*[contains(text(), '$h')]/following-sibling::*");
+                foreach ($nodes as $node) {
+                    // Stop if another heading is encountered
+                    if (in_array(strtolower($node->nodeName), ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])) {
+                        break;
+                    }
+                    // Append the node's HTML to the section
+                    $section .= $dom->saveHTML($node);
+                }
+                // Add the section to the sections array
+                $sections[$key][] = $section;
+            }
+        }
+    }
+    return $sections;
+}
+
 
 function best_match_page_title($pages, $string, $extended_string=null) {
     $best_match = null;
@@ -282,6 +312,12 @@ function get_elementor_markup($page) {
 
 function create_category_growers_guide_from_page($term, $page, $title=null) {
     $page_content = get_elementor_markup($page);
+    // $page_content = urldecode($page_content);
+    // $page_content = mb_convert_encoding($page_content, 'UTF-8', 'auto');
+    if (strpos($page_content, 'â') !== false) {
+        echo "The character â exists in the page content.\n";
+        exit;
+    }
 
     $headings = [
         'sowing' => description_headings_by_phrase($page_content, 'Sow'),
@@ -304,6 +340,17 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
         }
     }
     echo "----------------------------------------\n";
+
+    $sections = get_sections_between_headings($page_content, $headings);
+
+    echo "Sections:\n";
+    foreach ($sections as $key => $section) {
+        echo strtoupper($key) . ":\n";
+        foreach ($section as $content) {
+            echo $content . "\n";
+        }
+        echo "----------------------------------------\n";
+    }
 
     $post_id = wp_insert_post([
         'post_title' => $title ?? 'How to grow ' . $term->name,
