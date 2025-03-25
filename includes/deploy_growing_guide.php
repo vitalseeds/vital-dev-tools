@@ -371,7 +371,8 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
     }
 }
 
-function create_growers_guides_from_product_cat($terms, $check_only = true, $growing_info = true) {
+
+function create_growers_guides_from_product_cat($terms, $check_only = true) {
     // - step through by category
     // - look for matching growing guide resource
     //    - if we have one
@@ -395,7 +396,6 @@ function create_growers_guides_from_product_cat($terms, $check_only = true, $gro
 
     $count_seeds_categories = 0;
     $count_seeds_category_growing_instructions = 0;
-    $items_with_growing_info = !($check_only && !$growing_info);
 
     delete_all_growing_guides();
     echo "========================================\n\n";
@@ -422,7 +422,7 @@ function create_growers_guides_from_product_cat($terms, $check_only = true, $gro
             ]);
 
             // Growing resources page
-            if (!empty($growing_resource_pages) && $growing_info) {
+            if (!empty($growing_resource_pages)) {
                 echo "Category: \033[33m{$cat_name}:\033[0m\n";
                 echo "----------------------------------------\n";
 
@@ -446,9 +446,7 @@ function create_growers_guides_from_product_cat($terms, $check_only = true, $gro
                 }
                 echo "========================================\n";
             }
-            if (empty($growing_resource_pages) && !$growing_info) {
-                echo "{$cat_name}\n";
-            }
+
             // Check the category description for growing information too
             // if ($headings_including_growing = description_has_growing_information($term->description)) {
             //     $count_seeds_category_growing_instructions ++;
