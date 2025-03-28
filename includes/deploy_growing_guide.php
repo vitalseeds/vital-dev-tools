@@ -392,8 +392,13 @@ function get_rendered_html($post) {
 
 function create_category_growers_guide_from_page($term, $page, $title=null) {
     // $markup = get_elementor_markup($page);
-    $page_content = get_rendered_html($page);
-    $markup = strip_extra_markup($page_content);
+    $rendered_content = get_rendered_html($page);
+    // Extract media IDs from the rendered content
+    $media_ids = [];
+    if (preg_match_all('/wp-image-(\d+)/', $rendered_content, $matches)) {
+        $media_ids = array_unique($matches[1]);
+    }
+    $markup = strip_extra_markup($rendered_content);
     // $markup = urldecode($markup);
     // $markup = mb_convert_encoding($markup, 'UTF-8', 'auto');
 
@@ -447,9 +452,13 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
         update_field('culinary_ideas', $sections['culinary_ideas'], $post_id);
         update_field('seed_saving', $sections['seed_saving'], $post_id);
 
+        update_field('images', $media_ids, $post_id);
+
         wp_set_object_terms($post_id, $term->term_id, 'product_cat');
         echo "Created guide: \033[36m{$term->name} \033[0m -> \033[35m{$page->post_title} (guide)\033[0m\n";
-        return get_post($post_id);
+        $growers_guide = get_post($post_id);
+        get_permalink($growers_guide->ID);
+        return $growers_guide;
     } else {
         echo "Failed to create growers guide for {$term->name} from page {$page->post_title}\n";
         return null;
@@ -496,6 +505,7 @@ function add_redirection($source_url, $target_url, $redirect_type = 301, $cli = 
 }
 
 function create_growers_guide_from_resource_page($growing_resources_page_id) {
+    delete_all_growing_guides();
     $resource_pages = get_pages(['child_of' => $growing_resources_page_id]);
     $terms = get_terms(['taxonomy' => 'product_cat', 'hide_empty' => false]);
     $categories = array_filter($terms, function($term) {
