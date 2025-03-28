@@ -4,15 +4,47 @@ require_once __DIR__ . '/utils.php';
 
 define('SEED_PARENT_TERM_ID', 276);
 
+// These pages had quirky categories picked out by the migration:
+// Growing guide title: How to grow Agretti (86336)
+//            Category: Winter lettuce
+// Growing guide title: How to grow broccoli Fiolaro di Creazzo (85461)
+//            Category: Broccoli Seeds
+// Growing guide title: How to grow chillies and peppers (40289)
+//            Category: Bells of Ireland Seeds
+// Growing guide title: How to grow Claytonia (85710)
+//            Category: Batavia
+// Growing guide title: How to grow Corn Salad (86117)
+//            Category: Coriander Seeds
+// Growing guide title: How to grow Fiolaro Di Creazzo (86331)
+//            Category: Viola Seeds
+// Growing guide title: How to grow peas (40352)
+//            Category: Beans
+define('SKIP_GROWING_RESOURCE_IDS', [
+    86336,
+    85461,
+    40289,
+    85710,
+    86117,
+    86331,
+    40352,
+]);
+
 
 if (defined('WP_CLI') && WP_CLI) {
-    WP_CLI::add_command('vs test_confirm', function() {
-        WP_CLI::line("Choose an action:");
-        WP_CLI::line("1. Skip");
-        WP_CLI::line("2. Update");
-        WP_CLI::line("3. Delete");
-        $input = readline("Enter your choice (1/2/3): ");
-        WP_CLI::line("You chose option $input");
+    WP_CLI::add_command('vs list_growing_guides', function() {
+        $guides = get_posts([
+            'post_type' => 'growing-guide',
+            'numberposts' => -1,
+            'post_status' => 'publish',
+            'orderby' => 'title',
+            'order' => 'ASC',
+        ]);
+
+        foreach ($guides as $guide) {
+            $permalink = get_permalink($guide->ID);
+            // echo "{$guide->post_title}: {$permalink}\n";
+            echo "{$permalink}\n";
+        }
     });
     WP_CLI::add_command('vs backup_product_descriptions', function() {
         $products = get_posts([
@@ -61,7 +93,7 @@ if (defined('WP_CLI') && WP_CLI) {
         $terms = get_terms(['taxonomy' => 'product_cat', 'hide_empty' => false]);
         // create_empty_growers_guides($terms);
         // create_growers_guides_from_product_cat($terms);
-        create_growers_guide_from_resource_page(39860);
+        create_growers_guide_from_resource_page(39860, false);
     });
 
     WP_CLI::add_command('vs deploy_growing_guide', function() {
@@ -348,47 +380,7 @@ function get_rendered_html($post) {
     $page = get_post($post_id);
     $content = apply_filters('the_content', $post->post_content);
     return $content;
-
-    // // Get the raw post content
-    // $post_content = get_post_field('post_content', $post);
-    // // Use the block rendering function for Gutenberg
-    // $content = parse_blocks($post_content);
-    // $rendered_content = "";
-    // foreach ($content as $block) {
-    //     $rendered_content .= render_block($block);
-    // }
-    // // Handle Elementor content if applicable
-    // if (did_action('elementor/loaded')) {
-    //     $meta = get_post_meta($post_id, '_elementor_data', true);
-    //     if (!empty($meta)) {
-    //         // $rendered_content = Elementor\Plugin::$instance->frontend->get_builder_content($post_id);
-    //         $elementor_content = \Elementor\Plugin::$instance->frontend->get_builder_content_for_display($post_id);
-    //     }
-    // }
-    // return strip_extra_markup($rendered_content);
 }
-
-// function get_elementor_markup($page) {
-//     $elementor_data = get_post_meta($page->ID, '_elementor_data', true);
-//     if ($elementor_data) {
-//         $elementor_content = \Elementor\Plugin::$instance->frontend->get_builder_content_for_display($page->ID);
-//         // Remove layout tags
-//         // $content = preg_replace('/<section[^>]*>|<\/section>|<div[^>]*>|<\/div>/', '', $elementor_content);
-//         // $content = preg_replace('/<span[^>]*>|<\/span>/', '', $content);
-//         // // Remove images
-//         // $content = preg_replace('/<img[^>]*>/', '', $content);
-//         // return $content;
-//         $content = strip_tags($elementor_content, ['p', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li']);
-//         // remove class attributes
-//         $content = preg_replace('/class="[^"]*"/', '', $content);
-//         // remove target attributes
-//         $content = preg_replace('/target="[^"]*"/', '', $content);
-//         // Remove extra whitespace
-//         $content = preg_replace('/\s+/', ' ', $content);
-//         return $content;
-//     }
-//     return $page->post_content;
-// }
 
 function create_category_growers_guide_from_page($term, $page, $title=null) {
     // $markup = get_elementor_markup($page);
@@ -433,7 +425,7 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
         echo $section . "\n";;
         echo "----------------------------------------\n";
     }
-
+    return;
     $post_id = wp_insert_post([
         'post_title' => $title ?? 'How to grow ' . $term->name,
         'post_content' => $page->post_content,
@@ -453,6 +445,8 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
         update_field('seed_saving', $sections['seed_saving'], $post_id);
 
         update_field('images', $media_ids, $post_id);
+        update_field('original_growing_reference_page', $page->ID, $post_id);
+
 
         wp_set_object_terms($post_id, $term->term_id, 'product_cat');
         echo "Created guide: \033[36m{$term->name} \033[0m -> \033[35m{$page->post_title} (guide)\033[0m\n";
@@ -504,7 +498,7 @@ function add_redirection($source_url, $target_url, $redirect_type = 301, $cli = 
     return isset($data['id']);
 }
 
-function create_growers_guide_from_resource_page($growing_resources_page_id) {
+function create_growers_guide_from_resource_page($growing_resources_page_id, $check_only=false) {
     delete_all_growing_guides();
     $resource_pages = get_pages(['child_of' => $growing_resources_page_id]);
     $terms = get_terms(['taxonomy' => 'product_cat', 'hide_empty' => false]);
@@ -515,7 +509,7 @@ function create_growers_guide_from_resource_page($growing_resources_page_id) {
     WP_CLI::log("\033[35mcheck that the proposed growing guide title matches the category.\033[0m\n ");
 
     foreach ($resource_pages as $page) {
-        if ($page->ID != 71019) {
+        if ( in_array($page->ID, SKIP_GROWING_RESOURCE_IDS)) {
             continue;
         }
         $title = str_replace('How to grow ', '', $page->post_title);
@@ -524,10 +518,10 @@ function create_growers_guide_from_resource_page($growing_resources_page_id) {
         if ($term) {
             WP_CLI::log("Growing guide title: \033[36m{$page->post_title} ({$page->ID})\033[0m");
             WP_CLI::log("           Category: \033[35m" . $term->name . "\033[0m");
+            if ( $check_only ) { continue; }
             // $confirm = WP_CLI::confirm("Do you want to create a growing guide
             // for this category?", false);
-            // $confirm = confirmation_prompt( "Do you want to create a growing
-            // guide for this category? (y/n)", $options = ['y'] );
+            // $confirm = confirmation_prompt( "Do you want to create a growing guide for this category? (y/n)", $options = ['y'] );
             $confirm = true;
             if ($confirm) {
                 // Create the growing guide
@@ -545,11 +539,11 @@ function create_growers_guide_from_resource_page($growing_resources_page_id) {
 }
 
 function create_growers_guides_from_product_cat($terms, $check_only = true) {
-    // - step through by category
-    // - look for matching growing guide resource
+    // ✔ step through by category
+    // ✔ look for matching growing guide resource
     //    - if we have one
-    //        convert to a growers guide
-    //        add link to the category
+    //        ✔ convert to a growers guide
+    //        ✔ add link to the category
     //    - if we don't
     //         - check the category description for growing information
     //         - divide up the description by heading, use regex or simple explode
@@ -569,7 +563,7 @@ function create_growers_guides_from_product_cat($terms, $check_only = true) {
     $count_seeds_categories = 0;
     $count_seeds_category_growing_instructions = 0;
 
-    delete_all_growing_guides();
+    // delete_all_growing_guides();
     echo "========================================\n\n";
 
     foreach ($terms as $term) {
@@ -631,9 +625,12 @@ function create_growers_guides_from_product_cat($terms, $check_only = true) {
                 echo "----------------------------------------\n";
                 if ($best_match) {
                     $guide = create_category_growers_guide_from_page($term, $best_match, $guide_title);
-                    $permalink = get_permalink($guide);
-                    echo $permalink . "\n";
-                    add_redirection(get_permalink($best_match), $permalink, 302);
+                    if ($guide) {
+                        update_field('growers_guide', $guide->ID, 'term_' . $term->term_id);
+                        $permalink = get_permalink($guide);
+                        echo $permalink . "\n";
+                        add_redirection(get_permalink($best_match), $permalink, 302);
+                    }
                 }
                 echo "========================================\n";
             }
