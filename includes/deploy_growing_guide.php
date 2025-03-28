@@ -1,9 +1,19 @@
 <?php
 
+require_once __DIR__ . '/utils.php';
 
 define('SEED_PARENT_TERM_ID', 276);
 
+
 if (defined('WP_CLI') && WP_CLI) {
+    WP_CLI::add_command('vs test_confirm', function() {
+        WP_CLI::line("Choose an action:");
+        WP_CLI::line("1. Skip");
+        WP_CLI::line("2. Update");
+        WP_CLI::line("3. Delete");
+        $input = readline("Enter your choice (1/2/3): ");
+        WP_CLI::line("You chose option $input");
+    });
     WP_CLI::add_command('vs backup_product_descriptions', function() {
         $products = get_posts([
             'post_type' => 'product',
@@ -50,7 +60,8 @@ if (defined('WP_CLI') && WP_CLI) {
     WP_CLI::add_command('vs create_growers_guides', function() {
         $terms = get_terms(['taxonomy' => 'product_cat', 'hide_empty' => false]);
         // create_empty_growers_guides($terms);
-        create_growers_guides_from_product_cat($terms);
+        // create_growers_guides_from_product_cat($terms);
+        create_growers_guide_from_resource_page(39860);
     });
 
     WP_CLI::add_command('vs deploy_growing_guide', function() {
@@ -223,6 +234,9 @@ function description_has_growing_information($description) {
 function get_headings_from_description($description) {
     // preg_match_all('/<h[1-6][^>]*>(.*?)<\/h[1-6]>/', $description, $matches);
     // return $matches[1];
+    if (empty($description)) {
+        return [];
+    }
     $dom = new DOMDocument();
     libxml_use_internal_errors(true);
     $dom->loadHTML($description);
@@ -240,6 +254,9 @@ function get_headings_from_description($description) {
 }
 
 function get_sections_between_headings($page_content, $headings) {
+    if (empty($page_content)) {
+        return [];
+    }
     $sections = [];
     $dom = new DOMDocument();
     libxml_use_internal_errors(true);
@@ -262,17 +279,17 @@ function get_sections_between_headings($page_content, $headings) {
                     $section .= $dom->saveHTML($node);
                 }
                 // Add the section to the sections array
-                $sections[$key][] = $section;
+                $sections[$key] = $section;
             }
         }
     }
     return $sections;
 }
 
-
 function best_match_page_title($pages, $string, $extended_string=null) {
     $best_match = null;
     $best_similarity = 0;
+    $threshold = 40;
     $extended_string = $extended_string ?? $string;
     foreach ($pages as $page) {
         similar_text($string, $page->post_title, $similarity);
@@ -285,48 +302,110 @@ function best_match_page_title($pages, $string, $extended_string=null) {
             $best_match = $page;
         }
     }
+    if ($best_similarity < $threshold) {
+        $best_match = null;
+    }
     return $best_match;
 }
 
-function get_elementor_markup($page) {
-    $elementor_data = get_post_meta($page->ID, '_elementor_data', true);
-    if ($elementor_data) {
-        $elementor_content = \Elementor\Plugin::$instance->frontend->get_builder_content_for_display($page->ID);
-        // Remove layout tags
-        // $content = preg_replace('/<section[^>]*>|<\/section>|<div[^>]*>|<\/div>/', '', $elementor_content);
-        // $content = preg_replace('/<span[^>]*>|<\/span>/', '', $content);
-        // // Remove images
-        // $content = preg_replace('/<img[^>]*>/', '', $content);
-        // return $content;
-        $content = strip_tags($elementor_content, ['p', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li']);
-        // remove class attributes
-        $content = preg_replace('/class="[^"]*"/', '', $content);
-        // remove target attributes
-        $content = preg_replace('/target="[^"]*"/', '', $content);
-        // Remove extra whitespace
-        $content = preg_replace('/\s+/', ' ', $content);
-        return $content;
+function best_match_category_title($terms, $string, $extended_string=null, $threshold=50) {
+    $best_match = null;
+    $best_similarity = 0;
+    $extended_string = $extended_string ?? $string;
+    foreach ($terms as $term) {
+        similar_text($string, $term->name, $similarity);
+        // if the exact string is found in the title give it a boost
+        if (stripos($term->post_title, $extended_string) !== false) {
+            $similarity += 20;
+        }
+        if ($similarity > $best_similarity) {
+            $best_similarity = $similarity;
+            $best_match = $term;
+        }
     }
-    return $page->post_content;
+    if ($best_similarity < $threshold) {
+        $best_match = null;
+    }
+    return $best_match;
 }
 
+function strip_extra_markup($content) {
+    $content = strip_tags($content, ['p', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li']);
+    // remove class attributes
+    $content = preg_replace('/class="[^"]*"/', '', $content);
+    // remove target attributes
+    $content = preg_replace('/target="[^"]*"/', '', $content);
+    // Remove extra whitespace
+    $content = preg_replace('/\s+/', ' ', $content);
+    return $content;
+}
+
+function get_rendered_html($post) {
+    $post_id = is_object($post) ? $post->ID : $post;
+    $post = is_int($post) ? get_post($post) : $post;
+
+    // remove_filter('the_content', 'do_shortcode', 11);
+    $page = get_post($post_id);
+    $content = apply_filters('the_content', $post->post_content);
+    return $content;
+
+    // // Get the raw post content
+    // $post_content = get_post_field('post_content', $post);
+    // // Use the block rendering function for Gutenberg
+    // $content = parse_blocks($post_content);
+    // $rendered_content = "";
+    // foreach ($content as $block) {
+    //     $rendered_content .= render_block($block);
+    // }
+    // // Handle Elementor content if applicable
+    // if (did_action('elementor/loaded')) {
+    //     $meta = get_post_meta($post_id, '_elementor_data', true);
+    //     if (!empty($meta)) {
+    //         // $rendered_content = Elementor\Plugin::$instance->frontend->get_builder_content($post_id);
+    //         $elementor_content = \Elementor\Plugin::$instance->frontend->get_builder_content_for_display($post_id);
+    //     }
+    // }
+    // return strip_extra_markup($rendered_content);
+}
+
+// function get_elementor_markup($page) {
+//     $elementor_data = get_post_meta($page->ID, '_elementor_data', true);
+//     if ($elementor_data) {
+//         $elementor_content = \Elementor\Plugin::$instance->frontend->get_builder_content_for_display($page->ID);
+//         // Remove layout tags
+//         // $content = preg_replace('/<section[^>]*>|<\/section>|<div[^>]*>|<\/div>/', '', $elementor_content);
+//         // $content = preg_replace('/<span[^>]*>|<\/span>/', '', $content);
+//         // // Remove images
+//         // $content = preg_replace('/<img[^>]*>/', '', $content);
+//         // return $content;
+//         $content = strip_tags($elementor_content, ['p', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li']);
+//         // remove class attributes
+//         $content = preg_replace('/class="[^"]*"/', '', $content);
+//         // remove target attributes
+//         $content = preg_replace('/target="[^"]*"/', '', $content);
+//         // Remove extra whitespace
+//         $content = preg_replace('/\s+/', ' ', $content);
+//         return $content;
+//     }
+//     return $page->post_content;
+// }
+
 function create_category_growers_guide_from_page($term, $page, $title=null) {
-    $page_content = get_elementor_markup($page);
-    // $page_content = urldecode($page_content);
-    // $page_content = mb_convert_encoding($page_content, 'UTF-8', 'auto');
-    if (strpos($page_content, 'â') !== false) {
-        echo "The character â exists in the page content.\n";
-        exit;
-    }
+    // $markup = get_elementor_markup($page);
+    $page_content = get_rendered_html($page);
+    $markup = strip_extra_markup($page_content);
+    // $markup = urldecode($markup);
+    // $markup = mb_convert_encoding($markup, 'UTF-8', 'auto');
 
     $headings = [
-        'sowing' => description_headings_by_phrase($page_content, 'Sow'),
-        'transplant' => description_headings_by_phrase($page_content, 'Transplant'),
-        'care' => description_headings_by_phrase($page_content, 'Care'),
-        'challenges' => description_headings_by_phrase($page_content, ['Challenges', 'Diseases']),
-        'harvest' => description_headings_by_phrase($page_content, 'Harvest'),
-        'seed' => description_headings_by_phrase($page_content, 'Saving'),
-        'varieties' => description_headings_by_phrase($page_content, 'Varieties'),
+        'seed_sowing' => description_headings_by_phrase($markup, 'Sow'),
+        'transplanting' => description_headings_by_phrase($markup, 'Transplant'),
+        'plant_care' => description_headings_by_phrase($markup, 'Care'),
+        'challenges' => description_headings_by_phrase($markup, ['Challenges', 'Diseases']),
+        'harvest' => description_headings_by_phrase($markup, 'Harvest'),
+        'seed_saving' => description_headings_by_phrase($markup, 'Saving'),
+        'culinary_ideas' => description_headings_by_phrase($markup, ['Culinary', 'Cooking']),
+        // 'varieties' => description_headings_by_phrase($markup, 'Varieties'),
     ];
 
     foreach ($headings as $key => $heading) {
@@ -341,14 +420,12 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
     }
     echo "----------------------------------------\n";
 
-    $sections = get_sections_between_headings($page_content, $headings);
+    $sections = get_sections_between_headings($markup, $headings);
 
     echo "Sections:\n";
     foreach ($sections as $key => $section) {
         echo strtoupper($key) . ":\n";
-        foreach ($section as $content) {
-            echo $content . "\n";
-        }
+        echo $section . "\n";;
         echo "----------------------------------------\n";
     }
 
@@ -361,7 +438,15 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
 
     if (!is_wp_error($post_id)) {
         update_field('growers_guide', $post_id, 'term_' . $term->term_id);
-        // update_field('seed_sowing', $sowing_section, $post_id);
+
+        update_field('seed_sowing', $sections['seed_sowing'], $post_id);
+        update_field('transplanting', $sections['transplanting'], $post_id);
+        update_field('plant_care', $sections['plant_care'], $post_id);
+        update_field('challenges', $sections['challenges'], $post_id);
+        update_field('harvest', $sections['harvest'], $post_id);
+        update_field('culinary_ideas', $sections['culinary_ideas'], $post_id);
+        update_field('seed_saving', $sections['seed_saving'], $post_id);
+
         wp_set_object_terms($post_id, $term->term_id, 'product_cat');
         echo "Created guide: \033[36m{$term->name} \033[0m -> \033[35m{$page->post_title} (guide)\033[0m\n";
         return get_post($post_id);
@@ -371,6 +456,83 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
     }
 }
 
+/**
+ * Adds a redirection using the Redirection plugin's REST API.
+ *
+ * @param string $source_url The URL to redirect from.
+ * @param string $target_url The URL to redirect to.
+ * @param int $redirect_type The type of redirection (default is 301).
+ * @return bool True if the redirection was added successfully, false otherwise.
+ */
+function add_redirection($source_url, $target_url, $redirect_type = 301, $cli = true) {
+    $api_url = rest_url('redirection/v1/redirect');
+    $args = array(
+        'method' => 'POST',
+        'headers' => array(
+            'Content-Type' => 'application/json',
+            'X-WP-Nonce' => wp_create_nonce('wp_rest')
+        ),
+        'body' => json_encode(array(
+            'url' => $source_url,
+            'action_data' => array('url' => $target_url),
+            'action_type' => 'url',
+            'action_code' => $redirect_type,
+            'group_id' => 1, // Default group
+            'enabled' => true
+        ))
+    );
+    $response = wp_remote_post($api_url, $args);
+    if (is_wp_error($response)) {
+        return false;
+    }
+    $body = wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
+    if (isset($data['id'])) {
+        "Added redirection from \033[33m$source_url\033[0m\n to \033[33m$target_url\033[0m\n";
+    } else {
+        echo "\033[31mFailed to add redirection from \033[33m$source_url\033[31m\n to \033[33m$target_url\033[31m\n\033[0m";
+    }
+    return isset($data['id']);
+}
+
+function create_growers_guide_from_resource_page($growing_resources_page_id) {
+    $resource_pages = get_pages(['child_of' => $growing_resources_page_id]);
+    $terms = get_terms(['taxonomy' => 'product_cat', 'hide_empty' => false]);
+    $categories = array_filter($terms, function($term) {
+        return is_under_seeds_category($term->term_id);
+    });
+    WP_CLI::log("Creating growing guides from existing pages in the growing resources section.");
+    WP_CLI::log("\033[35mcheck that the proposed growing guide title matches the category.\033[0m\n ");
+
+    foreach ($resource_pages as $page) {
+        if ($page->ID != 71019) {
+            continue;
+        }
+        $title = str_replace('How to grow ', '', $page->post_title);
+        // find a matching category
+        $term = best_match_category_title($categories, $title, $title . " seeds", 30);
+        if ($term) {
+            WP_CLI::log("Growing guide title: \033[36m{$page->post_title} ({$page->ID})\033[0m");
+            WP_CLI::log("           Category: \033[35m" . $term->name . "\033[0m");
+            // $confirm = WP_CLI::confirm("Do you want to create a growing guide
+            // for this category?", false);
+            // $confirm = confirmation_prompt( "Do you want to create a growing
+            // guide for this category? (y/n)", $options = ['y'] );
+            $confirm = true;
+            if ($confirm) {
+                // Create the growing guide
+                WP_CLI::log("\033[36mCreating growing guide for {$term->name} from {$page->post_title}\033[0m");
+                create_category_growers_guide_from_page($term, $page, $guide_id);
+            } else {
+                WP_CLI::log("\033[31mNo growers guide created\033[0m");
+            }
+            // $guide_id = WP_CLI::ask("Please provide an ID for the growing guide:");
+            WP_CLI::log("\n\n");
+        } else {
+            WP_CLI::log("\033[31m- {$page->post_title} ({$page->ID})\033[0m\n");
+        }
+    }
+}
 
 function create_growers_guides_from_product_cat($terms, $check_only = true) {
     // - step through by category
@@ -406,13 +568,31 @@ function create_growers_guides_from_product_cat($terms, $check_only = true) {
             $cat_name = trim(str_replace(['Seeds', 'seeds'], '', $term->name));
             $guide_title = 'How to grow ' . $cat_name;
 
+            // Don't create guides for categories with no products
+            $products_in_category = get_posts([
+                'post_type' => 'product',
+                'numberposts' => -1,
+                'post_status' => 'publish',
+                'tax_query' => [
+                    [
+                        'taxonomy' => 'product_cat',
+                        'field' => 'term_id',
+                        'terms' => $term->term_id,
+                        'include_children' => true,
+                    ],
+                ],
+            ]);
+            if (empty($products_in_category)) {
+                echo "No products found for category: \033[33m{$cat_name}\033[0m\n";
+                continue;
+            }
+
             if ($cat_name !== 'Pea') {
                 continue;
             }
 
             $term_url = get_term_link($term);
             $count_seeds_categories ++;
-
 
             $growing_resource_pages = get_posts([
                 'post_type' => 'page',
@@ -443,6 +623,7 @@ function create_growers_guides_from_product_cat($terms, $check_only = true) {
                     $guide = create_category_growers_guide_from_page($term, $best_match, $guide_title);
                     $permalink = get_permalink($guide);
                     echo $permalink . "\n";
+                    add_redirection(get_permalink($best_match), $permalink, 302);
                 }
                 echo "========================================\n";
             }
