@@ -27,6 +27,7 @@ define('OVERRIDE_GROWING_RESOURCE_CATEGORIES', [
     86117 => 219,
     86331 => null,
     40352 => 158,
+    70979
 ]);
 
 
@@ -105,9 +106,16 @@ if (defined('WP_CLI') && WP_CLI) {
 
         $from_url = $args[0];
         $to_url = $args[1];
+        $redirect_type = ! empty( $args[2] ) ? (int) $args[2] : 302;
+        // $flags = wp_parse_args(
+        //     $flags,
+        //     array(
+        //         'flush' => rtuw,
+        //     )
+        // );
 
         if (function_exists('add_redirection')) {
-            add_redirection($from_url, $to_url);
+            add_redirection($from_url, $to_url, $redirect_type, true);
             WP_CLI::success("Redirection added: '{$from_url}' -> '{$to_url}'.");
         } else {
             WP_CLI::error("'add_redirection' function not found.");
@@ -378,7 +386,6 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
 
 
     if (!is_wp_error($growing_guide_id)) {
-        update_field('growers_guide', $growing_guide_id, 'term_' . $term->term_id);
 
         update_field('seed_sowing', $sections['seed_sowing'], $growing_guide_id);
         update_field('transplanting', $sections['transplanting'], $growing_guide_id);
@@ -396,17 +403,31 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
         // Add the category to the growing guide
         wp_set_object_terms($growing_guide_id, $term->term_id, 'product_cat');
         echo "Created guide: \033[36m{$term->name} \033[0m -> \033[35m{$page->post_title} (guide)\033[0m\n";
-        $growers_guide = get_post($growing_guide_id);
+        $growing_guide = get_post($growing_guide_id);
 
-        // Link this growing guide to the category for display
+
+        // Add redirection for the old page to the new guide
+        $page_url = wp_make_link_relative(get_permalink($page));
+        $guide_url = wp_make_link_relative(get_permalink($growing_guide));
+
+        remove_redirection($page_url);
+        add_redirection($page_url, $guide_url, 302);
+
+        // Link category to the growing guide
         update_field('growing_guide', $growing_guide_id, 'term_' . $term->term_id);
+        // check the value of the category growing_guide field
+        $cat_gg = get_field('growing_guide', 'term_' . $term->term_id);
+        if (is_array($cat_gg)) {
+            $cat_gg = $cat_gg[0];
+        }
 
-        get_permalink($growers_guide->ID);
-        return $growers_guide;
+        get_permalink($growing_guide->ID);
+        return $growing_guide;
     } else {
         echo "Failed to create growers guide for {$term->name} from page {$page->post_title}\n";
         return null;
     }
+    flush_rewrite_rules();
 }
 
 function create_growers_guides_from_resource_pages($growing_resources_parent_id, $check_only=false, $delete=True) {
@@ -423,6 +444,9 @@ function create_growers_guides_from_resource_pages($growing_resources_parent_id,
 
     foreach ($resource_pages as $page) {
         if ( in_array($page->ID, array_keys(OVERRIDE_GROWING_RESOURCE_CATEGORIES))) {
+            continue;
+        }
+        if ($page->post_title != 'How to grow radish') {
             continue;
         }
         $title = str_replace('How to grow ', '', $page->post_title);
@@ -446,7 +470,7 @@ function create_growers_guides_from_resource_pages($growing_resources_parent_id,
             if ($confirm) {
                 // Create the growing guide
                 WP_CLI::log("\033[36mCreating growing guide for {$term->name} from {$page->post_title}\033[0m");
-                create_category_growers_guide_from_page($term, $page, $title);
+                create_category_growers_guide_from_page($term, $page, $page->post_title);
             } else {
                 WP_CLI::log("\033[31mNo growers guide created\033[0m");
             }

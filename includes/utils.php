@@ -174,7 +174,7 @@ function confirmation_prompt( $message, $options = ['y', 'n'] ) {
  * @param int $redirect_type The type of redirection (default is 301).
  * @return bool True if the redirection was added successfully, false otherwise.
  */
-function add_redirection($source_url, $target_url, $redirect_type = 302) {
+function add_redirection($source_url, $target_url, $redirect_type = 302, $flush = false) {
     global $wpdb;
 
     // Validate that both URLs are not absoulte
@@ -189,7 +189,9 @@ function add_redirection($source_url, $target_url, $redirect_type = 302) {
     if (strpos($target_url, '/') !== 0) {
         $target_url = '/' . ltrim($target_url, '/');
     }
-
+    // remove trailing slashes
+    $source_url = rtrim($source_url, '/');
+    $target_url = rtrim($target_url, '/');
 
     // Table names used by the Redirection plugin
     $redirection_groups_table = $wpdb->prefix . 'redirection_groups';
@@ -235,6 +237,45 @@ function add_redirection($source_url, $target_url, $redirect_type = 302) {
         ],
         ['%s', '%s', '%s', '%s', '%d', '%d', '%s', '%d', '%s', '%s', '%d', '%s', '%s', '%s']
     );
+    if ($flush) {
+        flush_rewrite_rules();
+    }
 
     return (bool) $result;
+}
+
+/**
+ * Deletes a redirection based on the source URL.
+ *
+ * @param string $source_url The URL to delete the redirection for.
+ * @return bool True if the redirection was deleted successfully, false otherwise.
+ */
+function remove_redirection($source_url) {
+    global $wpdb;
+
+    // Prepend "/" to relative url if not present
+    if (strpos($source_url, '/') !== 0) {
+        $source_url = '/' . ltrim($source_url, '/');
+    }
+    // Remove trailing slash
+    $source_url = rtrim($source_url, '/');
+
+    // Table name used by the Redirection plugin
+    $redirection_items_table = $wpdb->prefix . 'redirection_items';
+
+    // Delete the redirection from the redirection_items table
+    $result = $wpdb->delete(
+        $redirection_items_table,
+        ['url' => $source_url],
+        ['%s']
+    );
+
+    return (bool) $result;
+}
+
+if (defined('WP_CLI') && WP_CLI) {
+    WP_CLI::add_command('flush_rewrites', function () {
+        flush_rewrite_rules();
+        WP_CLI::success('Rewrite rules flushed successfully.');
+    });
 }
