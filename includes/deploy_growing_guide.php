@@ -409,11 +409,11 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
     }
 }
 
-function create_growers_guides_from_resource_pages($growing_resources_page_id, $check_only=false, $delete=True) {
+function create_growers_guides_from_resource_pages($growing_resources_parent_id, $check_only=false, $delete=True) {
     if ($delete) {
         delete_all_growing_guides();
     }
-    $resource_pages = get_pages(['child_of' => $growing_resources_page_id]);
+    $resource_pages = get_pages(['child_of' => $growing_resources_parent_id]);
     $terms = get_terms(['taxonomy' => 'product_cat', 'hide_empty' => false]);
     $categories = array_filter($terms, function($term) {
         return is_under_seeds_category($term->term_id);
@@ -425,10 +425,8 @@ function create_growers_guides_from_resource_pages($growing_resources_page_id, $
         if ( in_array($page->ID, array_keys(OVERRIDE_GROWING_RESOURCE_CATEGORIES))) {
             continue;
         }
-        // if ($page->post_title != 'How to grow basil') {
-        //     continue;
-        // }
         $title = str_replace('How to grow ', '', $page->post_title);
+
         // find a matching category
         $override_term_id = OVERRIDE_GROWING_RESOURCE_CATEGORIES[$page->ID] ?? null;
         if ($override_term_id !== null) {
@@ -448,11 +446,11 @@ function create_growers_guides_from_resource_pages($growing_resources_page_id, $
             if ($confirm) {
                 // Create the growing guide
                 WP_CLI::log("\033[36mCreating growing guide for {$term->name} from {$page->post_title}\033[0m");
-                create_category_growers_guide_from_page($term, $page, $guide_id);
+                create_category_growers_guide_from_page($term, $page, $title);
             } else {
                 WP_CLI::log("\033[31mNo growers guide created\033[0m");
             }
-            // $guide_id = WP_CLI::ask("Please provide an ID for the growing guide:");
+
             WP_CLI::log("\n\n");
         } else {
             WP_CLI::log("\033[31m- {$page->post_title} ({$page->ID})\033[0m\n");
