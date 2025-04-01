@@ -446,9 +446,9 @@ function create_growers_guides_from_resource_pages($growing_resources_parent_id,
         if ( in_array($page->ID, array_keys(OVERRIDE_GROWING_RESOURCE_CATEGORIES))) {
             continue;
         }
-        if ($page->post_title != 'How to grow radish') {
-            continue;
-        }
+        // if ($page->post_title != 'How to grow radish') {
+        //     continue;
+        // }
         $title = str_replace('How to grow ', '', $page->post_title);
 
         // find a matching category
