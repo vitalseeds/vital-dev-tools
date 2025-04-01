@@ -302,6 +302,15 @@ function create_empty_growers_guides($terms) {
     }
 }
 
+function get_pdf_link($markup) {
+    if (preg_match('/<a[^>]+href="([^"]+\.pdf)"[^>]*>/', $markup, $matches)) {
+        $file_url = $matches[1];
+        $attachment_id = attachment_url_to_postid($file_url);
+        return $attachment_id ?: $file_url;
+    }
+    return null;
+}
+
 function create_category_growers_guide_from_page($term, $page, $title=null) {
     // $markup = get_elementor_markup($page);
     $rendered_content = get_rendered_html($page);
@@ -352,6 +361,7 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
         'post_type' => 'growing-guide',
     ]);
 
+
     if (!is_wp_error($growing_guide_id)) {
         update_field('growers_guide', $growing_guide_id, 'term_' . $term->term_id);
 
@@ -364,6 +374,8 @@ function create_category_growers_guide_from_page($term, $page, $title=null) {
         update_field('seed_saving', $sections['seed_saving'], $growing_guide_id);
 
         update_field('images', $media_ids, $growing_guide_id);
+        $pdf = get_pdf_link($markup);
+        update_field('pdf', is_int($pdf) ? $pdf : null, $growing_guide_id);
         update_field('original_growing_reference_page', $page->ID, $growing_guide_id);
 
         // Add the category to the growing guide
