@@ -98,6 +98,21 @@ if (defined('WP_CLI') && WP_CLI) {
             echo "{$permalink}\n";
         }
     });
+    WP_CLI::add_command('vs add_redirection', function($args) {
+        if (count($args) < 2) {
+            WP_CLI::error("Please provide both 'from_url' and 'to_url'.");
+        }
+
+        $from_url = $args[0];
+        $to_url = $args[1];
+
+        if (function_exists('add_redirection')) {
+            add_redirection($from_url, $to_url);
+            WP_CLI::success("Redirection added: '{$from_url}' -> '{$to_url}'.");
+        } else {
+            WP_CLI::error("'add_redirection' function not found.");
+        }
+    });
     WP_CLI::add_command('vs backup_product_descriptions', function() {
         $products = get_posts([
             'post_type' => 'product',

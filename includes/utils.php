@@ -167,42 +167,74 @@ function confirmation_prompt( $message, $options = ['y', 'n'] ) {
 
 
 /**
- * Adds a redirection using the Redirection plugin's REST API.
- *
- * NOT CURRENTLY WORKING
+ * Adds a redirection using direct SQL for the Redirection plugin.
  *
  * @param string $source_url The URL to redirect from.
  * @param string $target_url The URL to redirect to.
  * @param int $redirect_type The type of redirection (default is 301).
  * @return bool True if the redirection was added successfully, false otherwise.
  */
-function add_redirection($source_url, $target_url, $redirect_type = 301, $cli = true) {
-    $api_url = rest_url('redirection/v1/redirect');
-    $args = array(
-        'method' => 'POST',
-        'headers' => array(
-            'Content-Type' => 'application/json',
-            'X-WP-Nonce' => wp_create_nonce('wp_rest')
-        ),
-        'body' => json_encode(array(
+function add_redirection($source_url, $target_url, $redirect_type = 302) {
+    global $wpdb;
+
+    // Validate that both URLs are not absoulte
+    if (strpos($source_url, 'http') === 0 || strpos($target_url, 'http') === 0) {
+        return false; // Invalid URLs
+    }
+
+    // Prepend "/" to relative url if not present
+    if (strpos($source_url, '/') !== 0) {
+        $source_url = '/' . ltrim($source_url, '/');
+    }
+    if (strpos($target_url, '/') !== 0) {
+        $target_url = '/' . ltrim($target_url, '/');
+    }
+
+
+    // Table names used by the Redirection plugin
+    $redirection_groups_table = $wpdb->prefix . 'redirection_groups';
+    $redirection_items_table = $wpdb->prefix . 'redirection_items';
+
+    // Check if the "growing_guides" group exists, create it if not
+    $group_id = $wpdb->get_var("SELECT id FROM $redirection_groups_table WHERE name = 'growing_guides' LIMIT 1");
+    if (!$group_id) {
+        $wpdb->insert(
+            $redirection_groups_table,
+            [
+                'name' => 'growing_guides',
+                'status' => 'enabled',
+                'module_id' => 1,
+                'tracking' => 1,
+                'position' => 0,
+            ],
+            [
+                '%s', '%s', '%d','%d','%d'
+            ]
+        );
+        $group_id = $wpdb->insert_id;
+    }
+
+    // Insert the redirection into the redirection_items table
+    $result = $wpdb->insert(
+        $redirection_items_table,
+        [
             'url' => $source_url,
-            'action_data' => array('url' => $target_url),
+            'match_url' => $source_url,
+            'match_data' => null,
+            'regex' => 0,
+            'position' => 0,
+            'last_count' => 0,
+            'last_access' => '1970-01-01 00:00:00',
+            'group_id' => $group_id,
+            'status' => 'enabled',
             'action_type' => 'url',
             'action_code' => $redirect_type,
-            'group_id' => 1, // Default group
-            'enabled' => true
-        ))
+            'action_data' => $target_url,
+            'match_type' => 'url',
+            'title' => '',
+        ],
+        ['%s', '%s', '%s', '%s', '%d', '%d', '%s', '%d', '%s', '%s', '%d', '%s', '%s', '%s']
     );
-    $response = wp_remote_post($api_url, $args);
-    if (is_wp_error($response)) {
-        return false;
-    }
-    $body = wp_remote_retrieve_body($response);
-    $data = json_decode($body, true);
-    if (isset($data['id'])) {
-        "Added redirection from \033[33m$source_url\033[0m\n to \033[33m$target_url\033[0m\n";
-    } else {
-        echo "\033[31mFailed to add redirection from \033[33m$source_url\033[31m\n to \033[33m$target_url\033[31m\n\033[0m";
-    }
-    return isset($data['id']);
+
+    return (bool) $result;
 }
