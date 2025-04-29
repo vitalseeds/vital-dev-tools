@@ -206,6 +206,15 @@ if (defined('WP_CLI') && WP_CLI) {
         WP_CLI::confirm('Delete all growing guides from the site. Are you sure?');
         delete_all_growing_guides();
     });
+
+    WP_CLI::add_command('vs add_growing_guide_product_cat', function() {
+        WP_CLI::confirm('Add product categories to all growing guides based on best match title. Are you sure?');
+        $terms = get_terms(['taxonomy' => 'product_cat', 'hide_empty' => false]);
+        $categories = array_filter($terms, function($term) {
+            return is_under_seeds_category($term->term_id);
+        });
+        add_product_cat_to_existing_growing_guides($categories);
+    });
 }
 
 function get_seed_parent_term() {
@@ -485,6 +494,35 @@ function create_growers_guides_from_resource_pages($growing_resources_parent_id,
             WP_CLI::log("\n\n");
         } else {
             WP_CLI::log("\033[31m- {$page->post_title} ({$page->ID})\033[0m\n");
+        }
+    }
+}
+
+function add_product_cat_to_existing_growing_guides($categories) {
+    $guides = get_posts([
+        'post_type' => 'growing-guide',
+        'numberposts' => -1,
+        'post_status' => 'publish',
+    ]);
+
+    WP_CLI::log("Adding product categories to existing growing guides based on their titles.");
+
+    foreach ($guides as $guide) {
+        $title = str_replace('How to grow ', '', $guide->post_title);
+
+        // Find the best matching category
+        $term = best_match_category_title($categories, $title, $title . " seeds", 30);
+
+        if ($term) {
+            WP_CLI::log("Growing guide title: \033[36m{$guide->post_title} ({$guide->ID})\033[0m");
+            WP_CLI::log("           Category: \033[35m" . $term->name . "\033[0m");
+
+            // Add the category to the growing guide
+            wp_set_object_terms($guide->ID, $term->term_id, 'product_cat');
+
+            WP_CLI::log("\033[32mCategory added to growing guide.\033[0m\n");
+        } else {
+            WP_CLI::log("\033[31mNo matching category found for {$guide->post_title} ({$guide->ID}).\033[0m\n");
         }
     }
 }
