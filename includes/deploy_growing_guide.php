@@ -84,7 +84,7 @@ if (defined('WP_CLI') && WP_CLI) {
             }
         }
     });
-    WP_CLI::add_command('vs list_growing_guides', function() {
+    WP_CLI::add_command('vs list_growing_guides', function($args, $assoc_args) {
         $guides = get_posts([
             'post_type' => 'growing-guide',
             'numberposts' => -1,
@@ -93,10 +93,17 @@ if (defined('WP_CLI') && WP_CLI) {
             'order' => 'ASC',
         ]);
 
+        $show_category = isset($assoc_args['cat']);
+
         foreach ($guides as $guide) {
             $permalink = get_permalink($guide->ID);
-            // echo "{$guide->post_title}: {$permalink}\n";
+            if ($show_category) {
+            $categories = wp_get_object_terms($guide->ID, 'product_cat');
+            $category_names = !is_wp_error($categories) ? implode(', ', wp_list_pluck($categories, 'name')) : 'None';
+            echo "{$permalink} (product_cat: {$category_names})\n";
+            } else {
             echo "{$permalink}\n";
+            }
         }
     });
     WP_CLI::add_command('vs add_redirection', function($args) {
