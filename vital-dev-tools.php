@@ -89,11 +89,16 @@ function vital_dev_tools_settings_page()
 		update_option('vital_dev_tools_prefix_product_title', 0);
 	}
 
+	if (isset($_POST['checkout_without_payment_user'])) {
+		update_option('vital_dev_tools_checkout_without_payment_user', sanitize_email($_POST['checkout_without_payment_user']));
+	}
+
 	echo '<div class="updated"><p>Settings saved.</p></div>';
 
 	$show_template = get_option('vital_dev_tools_show_template', 1);
 	$label_hooks = get_option('vital_dev_tools_label_hooks', 1);
 	$prefix_product_title = get_option('vital_dev_tools_prefix_product_title', 1);
+	$checkout_without_payment_user = get_option('vital_dev_tools_checkout_without_payment_user', '');
 ?>
 	<div class="wrap">
 		<h1>Vital Dev Tools Settings</h1>
@@ -110,6 +115,13 @@ function vital_dev_tools_settings_page()
 				<tr valign="top">
 					<th scope="row">Prefix Product Title with ID</th>
 					<td><input type="checkbox" name="prefix_product_title" <?php checked($prefix_product_title, 1); ?> /></td>
+				</tr>
+				<tr valign="top">
+					<th scope="row">Checkout Without Payment User Email</th>
+					<td>
+						<input type="email" name="checkout_without_payment_user" value="<?php echo esc_attr($checkout_without_payment_user); ?>" class="regular-text" />
+						<p class="description">Enter the email address of the user who can checkout without payment (leave empty to disable)</p>
+					</td>
 				</tr>
 			</table>
 			<?php submit_button(); ?>
@@ -282,5 +294,6 @@ function hide_all_admin_notices() {
 
 add_action('admin_init', 'hide_all_admin_notices');
 
+require_once __DIR__ . '/includes/checkout_without_payment.php';
 require_once __DIR__ . '/includes/deploy_calendar.php';
 require_once __DIR__ . '/includes/deploy_growing_guide.php';
